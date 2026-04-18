@@ -1,0 +1,23 @@
+import dash
+from dash import html
+from components.input_panel import create_input_panel
+from components.result_panels import create_result_panels
+from components.callbacks import register_callbacks
+
+# Инициализация Dash приложения с suppress_callback_exceptions=True
+app = dash.Dash(__name__, external_stylesheets=['/assets/custom.css'], suppress_callback_exceptions=True)
+
+# Компоновка приложения
+app.layout = html.Div(children=[
+    html.H1(children='Интерактивный решатель уравнения Вольтерры II рода', 
+            style={'textAlign': 'center', 'color': '#2c3e50'}),
+    
+    create_input_panel(),
+    create_result_panels(),
+])
+
+# Регистрация всех callbacks
+register_callbacks(app)
+
+if __name__ == '__main__':
+    app.run(debug=True)

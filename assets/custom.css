@@ -1,0 +1,63 @@
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    margin: 20px;
+    background-color: #f8f8f8;
+    color: #333;
+}
+
+h1 {
+    color: #1a5276;
+    margin-bottom: 30px;
+    font-size: 2.5em;
+}
+
+.dash-dropdown, .dash-slider {
+    margin-top: 15px;
+    margin-bottom: 25px;
+}
+
+#error-output {
+    color: #c0392b;
+    font-weight: bold;
+    margin-top: 25px;
+    margin-bottom: 20px;
+    padding: 10px;
+    background-color: #fce4ec;
+    border-radius: 5px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.dash-graph-container {
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 10px;
+    background-color: #fff;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.05);
+    margin-bottom: 20px;
+}
+
+label {
+    font-weight: bold;
+    margin-bottom: 8px;
+    display: block;
+    color: #555;
+}
+
+.Select-control {
+    border-radius: 5px !important;
+    border-color: #ccc !important;
+}
+
+.Select-value {
+    color: #333 !important;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
