@@ -31,6 +31,9 @@ def create_result_panels():
             ], className='graph-card', style={'width': '48%', 'display': 'inline-block', 'verticalAlign': 'top'}),
         ]),
         
+        # Блок с максимальной ошибкой
+        html.Div(id='max-error-display',),
+        
         html.Div(id='error-output', className='error-text', style={'display': 'none'}),
         dcc.Store(id='computation-time', data=0),
     ])

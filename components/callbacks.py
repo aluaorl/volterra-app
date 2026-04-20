@@ -302,19 +302,19 @@ def register_callbacks(app):
         return format_equation_beautifully(kernel_expr, rhs_expr)
     
     @app.callback(
-    [Output('solve-button', 'disabled'),
-     Output('solve-button', 'title'),
-     Output('error-message', 'children'),
-     Output('error-message', 'style'),
-     Output('volterra-graph', 'figure'),
-     Output('derivative-plot', 'figure'),
-     Output('kernel-sections-plot', 'figure'),
-     Output('kernel-3d-plot', 'figure'),
-     Output('error-output', 'children')],
-    [Input('kernel-input', 'value'),
-     Input('rhs-input', 'value')],
-    prevent_initial_call=False
-)
+        [Output('solve-button', 'disabled'),
+         Output('solve-button', 'title'),
+         Output('error-message', 'children'),
+         Output('error-message', 'style'),
+         Output('volterra-graph', 'figure'),
+         Output('derivative-plot', 'figure'),
+         Output('kernel-sections-plot', 'figure'),
+         Output('kernel-3d-plot', 'figure'),
+         Output('error-output', 'children')],
+        [Input('kernel-input', 'value'),
+         Input('rhs-input', 'value')],
+        prevent_initial_call=False
+    )
     def validate_inputs(kernel_expr, rhs_expr):
         kernel_valid = True
         rhs_valid = True
@@ -374,7 +374,9 @@ def register_callbacks(app):
          Output('status-message', 'children'),
          Output('status-message', 'style'),
          Output('computation-time', 'data'),
-         Output('solutions-history', 'data')],
+         Output('solutions-history', 'data'),
+         Output('max-error-display', 'children'),
+         Output('max-error-display', 'style')],
         [Input('solve-button', 'n_clicks')],
         [State('kernel-input', 'value'),
          State('rhs-input', 'value'),
@@ -409,6 +411,34 @@ def register_callbacks(app):
             (fig_solution, fig_derivative, error_text, 
              fig_kernel_sections, fig_kernel_3d,
              computation_time) = run_volterra_solution(kernel_expr, rhs_expr, initial_condition, N_points)
+            
+            # Создаем блок с максимальной ошибкой
+            max_error_display = html.Div([
+                                html.Div(
+                                    error_text,
+                                    style={
+                                        'fontWeight': 'bold',
+                                        'color': '#C0392B',
+                                        'fontSize': '1.1em',
+                                        'textAlign': 'center',
+                                        'padding': '12px 24px',
+                                        'background': "#E9F1F5",
+                                        'borderRadius': '12px',
+                                        'border': '1px solid #E8DCD0',
+                                        'boxShadow': '0 2px 8px rgba(0, 0, 0, 0.05)',
+                                        'display': 'inline-block',
+                                        'width': 'auto',
+                                        'fontFamily': "'Roboto', monospace"
+                                    }
+                                )
+                            ], style={
+                                'display': 'flex',
+                                'justifyContent': 'center',
+                                'alignItems': 'center',
+                                'margin': '30px 0 20px 0',
+                                'padding': '0 20px',
+                                'width': '100%'
+                            })
             
             success_status = html.Div([
                 html.Span("Вычисление успешно завершено! ", style={'fontWeight': 'bold', 'color': '#2C3E50'}),
@@ -447,7 +477,7 @@ def register_callbacks(app):
             return (fig_solution, fig_derivative, error_text, 
                     fig_kernel_sections, fig_kernel_3d,
                     {'display': 'none'}, success_status, {'textAlign': 'center', 'margin': '10px'}, 
-                    computation_time, new_history)
+                    computation_time, new_history, max_error_display, {'display': 'block'})
             
         except Exception as e:
             error_msg = str(e)
@@ -460,10 +490,11 @@ def register_callbacks(app):
             ], style={'color': '#E74C3C'})
             
             empty_fig = create_empty_figure("Ошибка вычислений")
+            empty_error_display = html.Div("")
             
             return (empty_fig, empty_fig, "Ошибка вычислений", empty_fig, empty_fig,
                     {'display': 'none'}, error_status, {'textAlign': 'center', 'margin': '10px'}, 
-                    0, no_update)
+                    0, no_update, empty_error_display, {'display': 'none'})
 
     @app.callback(
         Output('history-list', 'children'),
@@ -589,7 +620,9 @@ def register_callbacks(app):
          Output('status-message', 'children', allow_duplicate=True),
          Output('status-message', 'style', allow_duplicate=True),
          Output('history-modal', 'style', allow_duplicate=True),
-         Output('solve-button', 'n_clicks', allow_duplicate=True)],
+         Output('solve-button', 'n_clicks', allow_duplicate=True),
+         Output('max-error-display', 'children', allow_duplicate=True),
+         Output('max-error-display', 'style', allow_duplicate=True)],
         [Input({'type': 'load-solution', 'index': ALL}, 'n_clicks')],
         [State('solutions-history', 'data')],
         prevent_initial_call='initial_duplicate'
@@ -619,6 +652,12 @@ def register_callbacks(app):
                  fig_sec, fig_3d, _t) = run_volterra_solution(
                     record['kernel'], record['rhs'], initial_cond, N_points
                 )
+                
+                max_error_display = html.Div([
+                    html.Span("📊 ", style={'fontSize': '1.2em'}),
+                    html.Span(err_text, style={'fontWeight': 'bold', 'color': '#E74C3C', 'fontSize': '1.1em'})
+                ])
+                
             except Exception as e:
                 error_msg = str(e)
                 status_msg = html.Div([
@@ -626,6 +665,7 @@ def register_callbacks(app):
                     html.Div(error_msg, style={'fontSize': '0.9em', 'marginTop': '10px', 'color': '#C0392B'})
                 ], style={'color': '#E74C3C', 'textAlign': 'center', 'padding': '10px'})
                 empty_fig = create_empty_figure("Ошибка вычислений")
+                empty_error_display = html.Div("")
                 return (
                     no_update, no_update, no_update,
                     empty_fig, empty_fig, empty_fig, empty_fig,
@@ -635,7 +675,9 @@ def register_callbacks(app):
                     {'position': 'fixed', 'top': '0', 'left': '0', 'width': '100%', 'height': '100%',
                      'backgroundColor': 'rgba(0,0,0,0.5)', 'zIndex': '1000', 'display': 'none',
                      'backdropFilter': 'blur(5px)'},
-                    None
+                    None,
+                    empty_error_display,
+                    {'display': 'none'}
                 )
             
             status_msg = html.Div([
@@ -651,7 +693,9 @@ def register_callbacks(app):
                     fig_solution, fig_derivative, fig_sec, fig_3d, err_text,
                     status_msg, {'textAlign': 'center', 'margin': '10px'},
                     modal_closed_style,
-                    1)
+                    1,
+                    max_error_display,
+                    {'display': 'block'})
         
         raise PreventUpdate
     
