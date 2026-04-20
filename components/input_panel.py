@@ -219,47 +219,70 @@ def create_input_panel():
                             'width': '60%', 'margin': '0 auto'}),
         ], style={'padding': '15px', 'marginTop': '5px'}),
         
-        # Легенда функций
+       # Легенда функций - компактная версия
+html.Div([
+    html.Div([
+        html.H5('▼ Поддерживаемые функции и константы:', 
+                style={'color': '#1a5276', 'marginBottom': '8px', 'cursor': 'pointer', 'fontSize': '0.95em'},
+                id='legend-toggle'),
         html.Div([
+            # Вводная информация о синонимах
             html.Div([
-                html.H5('▼ Поддерживаемые функции и константы:', 
-                        style={'color': '#1a5276', 'marginBottom': '8px', 'cursor': 'pointer', 'fontSize': '0.95em'},
-                        id='legend-toggle'),
+                html.P('✓ Ввод распознает синонимы функций, как asin, arsin, arcsin', 
+                       style={'margin': '0 0 10px 0', 'color': '#555', 'fontSize': '0.8em', 'fontStyle': 'italic'}),
+            ]),
+            
+            html.Div([
+                # Колонка 1
                 html.Div([
-                    html.Div([
-                        html.Div([
-                            html.H6('Тригонометрические:', style={'color': '#2980b9', 'marginBottom': '3px', 'fontSize': '0.85em'}),
-                            html.P('sin, cos, tan, cot', style={'margin': '0 0 8px 0', 'color': '#333', 'fontSize': '0.8em'}),
-                            html.H6('Обратные тригонометрические:', style={'color': '#2980b9', 'marginBottom': '3px', 'fontSize': '0.85em'}),
-                            html.P('arcsin, arccos, arctan, arccot', 
-                                   style={'margin': '0 0 8px 0', 'color': '#333', 'fontSize': '0.8em'}),
-                            html.H6('Гиперболические:', style={'color': '#2980b9', 'marginBottom': '3px', 'fontSize': '0.85em'}),
-                            html.P('sinh, cosh, tanh, coth', style={'margin': '0 0 8px 0', 'color': '#333', 'fontSize': '0.8em'}),
-                        ], style={'width': '32%', 'display': 'inline-block', 'verticalAlign': 'top'}),
-                        
-                        html.Div([
-                            html.H6('Обратные гиперболические:', style={'color': '#2980b9', 'marginBottom': '3px', 'fontSize': '0.85em'}),
-                            html.P('asinh, acosh, atanh, acoth', style={'margin': '0 0 8px 0', 'color': '#333', 'fontSize': '0.8em'}),
-                            html.H6('Логарифмы и степени:', style={'color': '#2980b9', 'marginBottom': '3px', 'fontSize': '0.85em'}),
-                            html.P('ln, lg, log, log2, exp, sqrt, abs', style={'margin': '0 0 8px 0', 'color': '#333', 'fontSize': '0.8em'}),
-                            html.H6('Константы:', style={'color': '#2980b9', 'marginBottom': '3px', 'fontSize': '0.85em'}),
-                            html.P('pi, e', style={'margin': '0 0 8px 0', 'color': '#333', 'fontSize': '0.8em'}),
-                        ], style={'width': '32%', 'display': 'inline-block', 'verticalAlign': 'top'}),
-                        
-                        html.Div([
-                            html.H6('Степени:', style={'color': '#2980b9', 'marginBottom': '3px', 'fontSize': '0.85em'}),
-                            html.P('x^2 или x**2 - возведение в степень', style={'margin': '0 0 5px 0', 'color': '#333', 'fontSize': '0.8em'}),
-                            html.P('sqrt(3, x) - корень 3-й степени', style={'margin': '0 0 5px 0', 'color': '#333', 'fontSize': '0.8em'}),
-                            html.H6('Особенности ввода:', style={'color': '#2980b9', 'marginBottom': '3px', 'fontSize': '0.85em'}),
-                            html.P('2sinx → 2*sin(x)', style={'margin': '0 0 3px 0', 'color': '#333', 'fontSize': '0.8em'}),
-                            html.P('sinx → sin(x)', style={'margin': '0 0 3px 0', 'color': '#333', 'fontSize': '0.8em'}),
-                            html.P('Регистр не важен', style={'margin': '0 0 3px 0', 'color': '#333', 'fontSize': '0.8em'}),
-                            html.P('e^x → exp(x)', style={'margin': '0 0 3px 0', 'color': '#333', 'fontSize': '0.8em'}),
-                        ], style={'width': '32%', 'display': 'inline-block', 'verticalAlign': 'top'}),
-                    ])
-                ], id='legend-content', style={'display': 'none', 'marginTop': '8px'}),
-            ], style={'padding': '10px', 'backgroundColor': '#f8f9fa', 'borderRadius': '8px', 'marginTop': '15px', 'border': '1px solid #e0e0e0'}),
-        ]),
+                    html.H6('Тригонометрические и обратные:', style={'color': '#2980b9', 'marginBottom': '3px', 'fontSize': '0.85em'}),
+                    html.P('sin, cos, tan, tg, cot, ctg, sec, csc, cosec', 
+                           style={'margin': '0 0 8px 0', 'color': '#333', 'fontSize': '0.8em'}),
+                    html.P('arcsin, arccos, arctan, arctg, arccot, arcsec, arccsc', 
+                           style={'margin': '0 0 8px 0', 'color': '#333', 'fontSize': '0.8em'}),
+                    
+                    html.H6('Гиперболические и обратные:', style={'color': '#2980b9', 'marginBottom': '3px', 'fontSize': '0.85em'}),
+                    html.P('sinh, sh, cosh, ch, tanh, th, coth, cth, sech, csch', 
+                           style={'margin': '0 0 8px 0', 'color': '#333', 'fontSize': '0.8em'}),
+                    html.P('arsinh, arcosh, artanh, arcoth, arsech, arcsch', 
+                           style={'margin': '0 0 8px 0', 'color': '#333', 'fontSize': '0.8em'}),
+                ], style={'width': '32%', 'display': 'inline-block', 'verticalAlign': 'top'}),
+                
+                # Колонка 2
+                html.Div([
+                    html.H6('Логарифмы:', style={'color': '#2980b9', 'marginBottom': '3px', 'fontSize': '0.85em'}),
+                    html.P('ln, lg, log, log2, log10, log(a, x)', 
+                           style={'margin': '0 0 8px 0', 'color': '#333', 'fontSize': '0.8em'}),
+                    
+                    html.H6('Степени и корни:', style={'color': '#2980b9', 'marginBottom': '3px', 'fontSize': '0.85em'}),
+                    html.P('x^2, x**2, sqrt, sqrt(n, x)', 
+                           style={'margin': '0 0 8px 0', 'color': '#333', 'fontSize': '0.8em'}),
+                    
+                    html.H6('Модуль и экспонента:', style={'color': '#2980b9', 'marginBottom': '3px', 'fontSize': '0.85em'}),
+                    html.P('abs(x), exp(x), e^x', 
+                           style={'margin': '0 0 8px 0', 'color': '#333', 'fontSize': '0.8em'}),
+                ], style={'width': '32%', 'display': 'inline-block', 'verticalAlign': 'top'}),
+                
+                # Колонка 3
+                html.Div([
+                    html.H6('Константы:', style={'color': '#2980b9', 'marginBottom': '3px', 'fontSize': '0.85em'}),
+                    html.P('pi, π, e', 
+                           style={'margin': '0 0 8px 0', 'color': '#333', 'fontSize': '0.8em'}),
+                    
+                    html.H6('Греческие буквы:', style={'color': '#2980b9', 'marginBottom': '3px', 'fontSize': '0.85em'}),
+                    html.P('alpha, beta, gamma, delta, epsilon, zeta, eta, theta', 
+                           style={'margin': '0 0 3px 0', 'color': '#333', 'fontSize': '0.75em'}),
+                    html.P('iota, kappa, lambda, mu, nu, xi, pi, rho', 
+                           style={'margin': '0 0 3px 0', 'color': '#333', 'fontSize': '0.75em'}),
+                    html.P('sigma, tau, upsilon, phi, chi, psi, omega', 
+                           style={'margin': '0 0 8px 0', 'color': '#333', 'fontSize': '0.75em'}),
+                    
+                ], style={'width': '32%', 'display': 'inline-block', 'verticalAlign': 'top'}),
+            ]),
+            
+        ], id='legend-content', style={'display': 'none', 'marginTop': '8px'}),
+    ], style={'padding': '10px', 'backgroundColor': '#f8f9fa', 'borderRadius': '8px', 'marginTop': '15px', 'border': '1px solid #e0e0e0'}),
+]),
         
         html.Div([
             html.Button('Решить уравнение', id='solve-button',  disabled=True,

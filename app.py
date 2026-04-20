@@ -10,7 +10,7 @@ app = dash.Dash(__name__, external_stylesheets=['/assets/custom.css'], suppress_
 
 # Компоновка приложения
 app.layout = html.Div(children=[
-    html.H1(children='Решатель ИДУ Вольтерра II рода', 
+    html.H1(children='Решатель ИДУ Вольтерра', 
             style={'textAlign': 'center', 'color': '#1a5276'}),
     
     # Убрана строка с уравнением
