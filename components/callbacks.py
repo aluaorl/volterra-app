@@ -302,26 +302,26 @@ def register_callbacks(app):
         return format_equation_beautifully(kernel_expr, rhs_expr)
     
     @app.callback(
-        [Output('solve-button', 'disabled'),
-         Output('solve-button', 'title'),
-         Output('error-message', 'children'),
-         Output('error-message', 'style'),
-         Output('volterra-graph', 'figure'),
-         Output('derivative-plot', 'figure'),
-         Output('kernel-sections-plot', 'figure'),
-         Output('kernel-3d-plot', 'figure'),
-         Output('error-output', 'children')],
-        [Input('kernel-input', 'value'),
-         Input('rhs-input', 'value')],
-        prevent_initial_call=False
-    )
+    [Output('solve-button', 'disabled'),
+     Output('solve-button', 'title'),
+     Output('error-message', 'children'),
+     Output('error-message', 'style'),
+     Output('volterra-graph', 'figure'),
+     Output('derivative-plot', 'figure'),
+     Output('kernel-sections-plot', 'figure'),
+     Output('kernel-3d-plot', 'figure'),
+     Output('error-output', 'children')],
+    [Input('kernel-input', 'value'),
+     Input('rhs-input', 'value')],
+    prevent_initial_call=False
+)
     def validate_inputs(kernel_expr, rhs_expr):
         kernel_valid = True
         rhs_valid = True
         kernel_error = ""
         rhs_error = ""
         error_text = ""
-        
+    
         if kernel_expr and kernel_expr.strip():
             valid, msg = validate_expression_detailed(kernel_expr, ['x', 't'])
             if not valid:
@@ -355,21 +355,10 @@ def register_callbacks(app):
             button_title = "Решить уравнение"
         
         if error_text:
-            error_style = {
-                'textAlign': 'center', 
-                'color': '#E74C3C', 
-                'fontSize': '0.95em', 
-                'margin': '15px auto',
-                'padding': '12px',
-                'backgroundColor': '#FDF3F2',
-                'borderRadius': '8px',
-                'borderLeft': '4px solid #E74C3C',
-                'maxWidth': '80%'
-            }
+            error_style = {'display': 'block', 'className': 'error-message'}
             empty_fig = create_empty_figure("Некорректное выражение")
-            empty_fig2 = create_empty_figure("Некорректное выражение")
             return (button_disabled, button_title, error_text, error_style,
-                    empty_fig, empty_fig2, empty_fig, empty_fig, "")
+                    empty_fig, empty_fig, empty_fig, empty_fig, "")
         else:
             waiting_fig = create_empty_figure("Введите выражения и нажмите 'Решить'")
             return (button_disabled, button_title, "", {"display": "none"},
