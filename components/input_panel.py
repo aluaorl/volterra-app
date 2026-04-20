@@ -157,7 +157,7 @@ def create_input_panel():
         ]),
         
         html.Div([
-            html.Button('Решить уравнение', id='solve-button', 
+            html.Button('Решить уравнение', id='solve-button',  disabled=True,
                        style={
                            'backgroundColor': '#3498db',
                            'color': 'white',
