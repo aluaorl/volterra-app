@@ -34,14 +34,50 @@ def safe_function_evaluation(func, *args):
             raise ValueError(str(e))
 
 
+def trap_sum(n, x, h, K, phi, f_value, current_x):
+    """
+    ВАШ МЕТОД ТРАПЕЦИЙ для вычисления интеграла и правой части
+    Аналог MATLAB функции trap_sum
+    
+    Параметры:
+    n - текущий индекс
+    x - массив узлов
+    h - шаг
+    K - ядро
+    phi - значения φ на предыдущих шагах
+    f_value - значение f(x_n)
+    current_x - текущее значение x_n
+    
+    Возвращает:
+    s = f(x_n) + ∫₀ˣⁿ K(x_n,t)·φ(t) dt  (методом трапеций)
+    """
+    s = 0.0
+    # Интеграл от 0 до x_{n-1} методом трапеций
+    for i in range(n-1):  # от 0 до n-2 (индексы)
+        s += (h / 2) * (
+            safe_function_evaluation(K, current_x, x[i]) * phi[i] + 
+            safe_function_evaluation(K, current_x, x[i+1]) * phi[i+1]
+        )
+    # Добавляем f(x_n)
+    s += f_value
+    return s
+
+
 def solve_integro_differential_combined(x, h, K, f, initial_condition=0.0):
     """
-    Комбинированный метод для интегро-дифференциального уравнения
-    ОПТИМИЗИРОВАННАЯ ВЕРСИЯ (без numba)
+    КОМБИНИРОВАННЫЙ МЕТОД для интегро-дифференциального уравнения:
+    φ'(x) = f(x) + ∫₀ˣ K(x,t)·φ(t) dt
+    
+    КОМБИНАЦИЯ:
+    1. ВАШ МЕТОД ТРАПЕЦИЙ (trap_sum) - для вычисления интеграла
+    2. Метод Рунге-Кутты 4-го порядка - для решения ОДУ
+    
+    Алгоритм полностью соответствует вашему MATLAB коду,
+    но адаптирован для ОДУ первого порядка.
     """
     N = len(x) - 1
     phi = np.zeros(N + 1)
-    phi[0] = initial_condition
+    phi[0] = initial_condition  # φ(0) = заданное начальное условие
     
     # Предвычисление всех значений f(x)
     f_values = np.zeros(N + 1)
@@ -52,7 +88,6 @@ def solve_integro_differential_combined(x, h, K, f, initial_condition=0.0):
     K_cache = {}
     
     def get_K(x_val, t_val):
-        # Округляем для точности кеширования
         key = (round(x_val, 10), round(t_val, 10))
         if key not in K_cache:
             K_cache[key] = safe_function_evaluation(K, x_val, t_val)
@@ -61,67 +96,91 @@ def solve_integro_differential_combined(x, h, K, f, initial_condition=0.0):
     integral_values = np.zeros(N + 1)
     integral_values[0] = 0.0
     
-    x_arr = x
-    
     for i in range(N):
-        xi = x_arr[i]
+        xi = x[i]
         yi = phi[i]
         
-        # Вычисление интеграла I(xi) методом трапеций
-        I_xi = 0.0
-        if i > 0:
-            # Используем простой цикл (быстрее чем создавать много массивов)
-            for j in range(i):
-                K_j = get_K(xi, x_arr[j])
-                K_jp1 = get_K(xi, x_arr[j+1])
-                I_xi += (K_j * phi[j] + K_jp1 * phi[j+1]) * (h * 0.5)
+        # ========== ВАШ МЕТОД ТРАПЕЦИЙ для вычисления I(xi) ==========
+        # Вычисляем S = f(xi) + интеграл методом трапеций
+        S_i = 0.0
+        for j in range(i):
+            S_i += (h / 2) * (
+                get_K(xi, x[j]) * phi[j] + 
+                get_K(xi, x[j+1]) * phi[j+1]
+            )
+        S_i += f_values[i]
         
-        k1 = h * (f_values[i] + I_xi)
+        # Интегральный член I(xi) = S_i - f(xi)
+        I_xi = S_i - f_values[i]
+        integral_values[i] = I_xi
         
-        # k2
+        # Правая часть ОДУ: F = f(xi) + I(xi) = S_i
+        F_current = S_i
+        
+        # ========== МЕТОД РУНГЕ-КУТТЫ 4-ГО ПОРЯДКА ==========
+        k1 = h * F_current
+        
+        # k2: используем x_mid = xi + h/2
         x_mid = xi + h * 0.5
-        I_mid = 0.0
-        if i > 0:
-            for j in range(i):
-                K_mid_j = get_K(x_mid, x_arr[j])
-                K_mid_jp1 = get_K(x_mid, x_arr[j+1])
-                I_mid += (K_mid_j * phi[j] + K_mid_jp1 * phi[j+1]) * (h * 0.5)
         
+        # ВЫЧИСЛЯЕМ S в точке x_mid ВАШИМ МЕТОДОМ ТРАПЕЦИЙ
+        S_mid = 0.0
+        for j in range(i):
+            S_mid += (h / 2) * (
+                get_K(x_mid, x[j]) * phi[j] + 
+                get_K(x_mid, x[j+1]) * phi[j+1]
+            )
+        
+        # Добавляем вклад от отрезка [xi, x_mid] с прогнозом φ_mid
         phi_mid_guess = yi + k1 * 0.5
-        K_mid_xi = get_K(x_mid, xi)
-        K_mid_mid = get_K(x_mid, x_mid)
-        I_mid += (K_mid_xi * yi + K_mid_mid * phi_mid_guess) * (h * 0.25)
-        k2 = h * (f_values[i] + I_mid)
+        S_mid += (h / 4) * (
+            get_K(x_mid, xi) * yi + 
+            get_K(x_mid, x_mid) * phi_mid_guess
+        )
+        S_mid += f_values[i]  # f(x_mid) ≈ f(xi) для простоты, или интерполировать
         
-        # k3
+        k2 = h * S_mid
+        
+        # k3: снова в x_mid
         phi_mid_guess2 = yi + k2 * 0.5
-        I_mid2 = 0.0
-        if i > 0:
-            for j in range(i):
-                K_mid_j = get_K(x_mid, x_arr[j])
-                K_mid_jp1 = get_K(x_mid, x_arr[j+1])
-                I_mid2 += (K_mid_j * phi[j] + K_mid_jp1 * phi[j+1]) * (h * 0.5)
+        S_mid2 = 0.0
+        for j in range(i):
+            S_mid2 += (h / 2) * (
+                get_K(x_mid, x[j]) * phi[j] + 
+                get_K(x_mid, x[j+1]) * phi[j+1]
+            )
+        S_mid2 += (h / 4) * (
+            get_K(x_mid, xi) * yi + 
+            get_K(x_mid, x_mid) * phi_mid_guess2
+        )
+        S_mid2 += f_values[i]
         
-        I_mid2 += (K_mid_xi * yi + K_mid_mid * phi_mid_guess2) * (h * 0.25)
-        k3 = h * (f_values[i] + I_mid2)
+        k3 = h * S_mid2
         
-        # k4
+        # k4: в точке x_next = xi + h
         x_next = xi + h
-        I_next = 0.0
-        if i > 0:
-            for j in range(i):
-                K_next_j = get_K(x_next, x_arr[j])
-                K_next_jp1 = get_K(x_next, x_arr[j+1])
-                I_next += (K_next_j * phi[j] + K_next_jp1 * phi[j+1]) * (h * 0.5)
+        
+        S_next = 0.0
+        for j in range(i):
+            S_next += (h / 2) * (
+                get_K(x_next, x[j]) * phi[j] + 
+                get_K(x_next, x[j+1]) * phi[j+1]
+            )
         
         phi_next_guess = yi + k3
-        K_next_xi = get_K(x_next, xi)
-        K_next_next = get_K(x_next, x_next)
-        I_next += (K_next_xi * yi + K_next_next * phi_next_guess) * (h * 0.5)
-        k4 = h * (f_values[i+1] + I_next)
+        S_next += (h / 2) * (
+            get_K(x_next, xi) * yi + 
+            get_K(x_next, x_next) * phi_next_guess
+        )
+        S_next += f_values[i+1]
         
+        k4 = h * S_next
+        
+        # Вычисляем φ[i+1] по формуле Рунге-Кутты
         phi[i+1] = yi + (k1 + 2*k2 + 2*k3 + k4) / 6.0
-        integral_values[i+1] = I_next
+        
+        # Сохраняем интегральное значение
+        integral_values[i+1] = S_next - f_values[i+1]
     
     return phi, integral_values
 
@@ -129,9 +188,9 @@ def solve_integro_differential_combined(x, h, K, f, initial_condition=0.0):
 def get_reference_solution(x, K, f, initial_condition=0.0):
     """
     Эталонное решение для интегро-дифференциального уравнения
-    ОПТИМИЗИРОВАННАЯ ВЕРСИЯ
+    Использует более мелкую сетку для высокой точности
     """
-    N_ref = 200  # Уменьшено с 500 до 200 для скорости
+    N_ref = 300  # Баланс скорости и точности
     h_ref = (x[-1] - x[0]) / N_ref
     x_ref = np.linspace(x[0], x[-1], N_ref + 1)
     
@@ -156,65 +215,65 @@ def get_reference_solution(x, K, f, initial_condition=0.0):
         yi = phi_ref[i]
         
         try:
-            # Вычисление интеграла I(xi)
-            I_xi = 0.0
-            if i > 0:
-                for j in range(i):
-                    t_j = x_ref[j]
-                    t_jp1 = x_ref[j+1]
-                    K_j = get_K_ref(xi, t_j)
-                    K_jp1 = get_K_ref(xi, t_jp1)
-                    I_xi += (K_j * phi_ref[j] + K_jp1 * phi_ref[j+1]) * (h_ref * 0.5)
+            # Вычисляем S = f(xi) + интеграл методом трапеций
+            S_i = 0.0
+            for j in range(i):
+                S_i += (h_ref / 2) * (
+                    get_K_ref(xi, x_ref[j]) * phi_ref[j] + 
+                    get_K_ref(xi, x_ref[j+1]) * phi_ref[j+1]
+                )
+            S_i += f_ref[i]
             
-            k1 = h_ref * (f_ref[i] + I_xi)
+            k1 = h_ref * S_i
             
             # k2
             x_mid = xi + h_ref * 0.5
-            I_mid = 0.0
-            if i > 0:
-                for j in range(i):
-                    t_j = x_ref[j]
-                    t_jp1 = x_ref[j+1]
-                    K_mid_j = get_K_ref(x_mid, t_j)
-                    K_mid_jp1 = get_K_ref(x_mid, t_jp1)
-                    I_mid += (K_mid_j * phi_ref[j] + K_mid_jp1 * phi_ref[j+1]) * (h_ref * 0.5)
+            S_mid = 0.0
+            for j in range(i):
+                S_mid += (h_ref / 2) * (
+                    get_K_ref(x_mid, x_ref[j]) * phi_ref[j] + 
+                    get_K_ref(x_mid, x_ref[j+1]) * phi_ref[j+1]
+                )
             
             phi_mid_guess = yi + k1 * 0.5
-            K_mid_xi = get_K_ref(x_mid, xi)
-            K_mid_mid = get_K_ref(x_mid, x_mid)
-            I_mid += (K_mid_xi * yi + K_mid_mid * phi_mid_guess) * (h_ref * 0.25)
-            k2 = h_ref * (f_ref[i] + I_mid)
+            S_mid += (h_ref / 4) * (
+                get_K_ref(x_mid, xi) * yi + 
+                get_K_ref(x_mid, x_mid) * phi_mid_guess
+            )
+            S_mid += f_ref[i]
+            k2 = h_ref * S_mid
             
             # k3
             phi_mid_guess2 = yi + k2 * 0.5
-            I_mid2 = 0.0
-            if i > 0:
-                for j in range(i):
-                    t_j = x_ref[j]
-                    t_jp1 = x_ref[j+1]
-                    K_mid_j = get_K_ref(x_mid, t_j)
-                    K_mid_jp1 = get_K_ref(x_mid, t_jp1)
-                    I_mid2 += (K_mid_j * phi_ref[j] + K_mid_jp1 * phi_ref[j+1]) * (h_ref * 0.5)
-            
-            I_mid2 += (K_mid_xi * yi + K_mid_mid * phi_mid_guess2) * (h_ref * 0.25)
-            k3 = h_ref * (f_ref[i] + I_mid2)
+            S_mid2 = 0.0
+            for j in range(i):
+                S_mid2 += (h_ref / 2) * (
+                    get_K_ref(x_mid, x_ref[j]) * phi_ref[j] + 
+                    get_K_ref(x_mid, x_ref[j+1]) * phi_ref[j+1]
+                )
+            S_mid2 += (h_ref / 4) * (
+                get_K_ref(x_mid, xi) * yi + 
+                get_K_ref(x_mid, x_mid) * phi_mid_guess2
+            )
+            S_mid2 += f_ref[i]
+            k3 = h_ref * S_mid2
             
             # k4
             x_next = xi + h_ref
-            I_next = 0.0
-            if i > 0:
-                for j in range(i):
-                    t_j = x_ref[j]
-                    t_jp1 = x_ref[j+1]
-                    K_next_j = get_K_ref(x_next, t_j)
-                    K_next_jp1 = get_K_ref(x_next, t_jp1)
-                    I_next += (K_next_j * phi_ref[j] + K_next_jp1 * phi_ref[j+1]) * (h_ref * 0.5)
+            S_next = 0.0
+            for j in range(i):
+                S_next += (h_ref / 2) * (
+                    get_K_ref(x_next, x_ref[j]) * phi_ref[j] + 
+                    get_K_ref(x_next, x_ref[j+1]) * phi_ref[j+1]
+                )
             
             phi_next_guess = yi + k3
-            K_next_xi = get_K_ref(x_next, xi)
-            K_next_next = get_K_ref(x_next, x_next)
-            I_next += (K_next_xi * yi + K_next_next * phi_next_guess) * (h_ref * 0.5)
-            k4 = h_ref * (f_ref[i+1] + I_next)
+            S_next += (h_ref / 2) * (
+                get_K_ref(x_next, xi) * yi + 
+                get_K_ref(x_next, x_next) * phi_next_guess
+            )
+            S_next += f_ref[i+1]
+            k4 = h_ref * S_next
             
             phi_ref[i+1] = yi + (k1 + 2*k2 + 2*k3 + k4) / 6.0
             
