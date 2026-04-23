@@ -29,103 +29,7 @@ def _pattern_button_index(ctx):
     except (json.JSONDecodeError, TypeError, ValueError, AttributeError):
         return None
 
-def run_volterra_solution(kernel_expr, rhs_expr, initial_condition, N_points=1000, N_ref=200):
-   
-    start_time = time.time()
-    
-    if not kernel_expr or not kernel_expr.strip():
-        raise ValueError("Выражение для ядра K(x,t) не может быть пустым")
-    if not rhs_expr or not rhs_expr.strip():
-        raise ValueError("Выражение для правой части f(x) не может быть пустым")
-    
-    K_current, f_current = get_cached_functions(kernel_expr, rhs_expr) 
-    
-    try:
-        test_K = K_current(0.5, 0.5)
-        test_f = f_current(0.5)
-    except Exception as e:
-        raise ValueError(f"Ошибка при проверке функций ядра или правой части: {str(e)}")
-
-    a = 0
-    b = 1
-    h = (b - a) / N_points
-    x = np.linspace(a, b, N_points + 1)
-
-    phi_numerical, integral_values = solve_volterra_RK4(x, h, K_current, f_current, initial_condition)
-    
-    phi_reference = get_reference_solution(x, K_current, f_current, initial_condition, N_ref)
-    
-    f_values = np.array([f_current(xi) for xi in x])
-    
-    derivative_numerical = np.gradient(phi_numerical, h)
-    derivative_exact = f_values + integral_values 
-
-    fig_solution = go.Figure()
-    fig_solution.add_trace(go.Scatter(x=x, y=phi_reference, mode='lines', name='Эталон',
-                                      line=dict(color='#E74C3C', width=2)))
-    fig_solution.add_trace(go.Scatter(x=x, y=phi_numerical, mode='lines', name='Численное (RK4+Трапеции)',
-                                      line=dict(color='#2C3E50', dash='dash', width=1.5)))
-    fig_solution.update_layout(
-        title='', xaxis_title='x', yaxis_title='φ(x)', hovermode='x unified',
-        template='plotly_white', height=400, showlegend=True,
-        plot_bgcolor='white', paper_bgcolor='white',
-        font=dict(family="Roboto, sans-serif", size=12, color="#2C3E50")
-    )
-    
-    fig_derivative = go.Figure()
-    fig_derivative.add_trace(go.Scatter(x=x, y=derivative_numerical, mode='lines', name="φ'(x) (численная)",
-                                        line=dict(color='#34495E', width=2)))
-    fig_derivative.add_trace(go.Scatter(x=x, y=derivative_exact, mode='lines', 
-                                        name='f(x) + I(x) (точная)', line=dict(color='#E74C3C', dash='dash', width=1.5)))
-    fig_derivative.update_layout(
-        title='', xaxis_title='x', yaxis_title="φ'(x)", hovermode='x unified',
-        template='plotly_white', height=400, showlegend=True,
-        plot_bgcolor='white', paper_bgcolor='white',
-        font=dict(family="Roboto, sans-serif", size=12, color="#2C3E50")
-    )
-
-    error = np.abs(phi_numerical - phi_reference)
-    max_error = np.max(error)
-    error_text = f'Максимальная ошибка: {max_error:.2e}'
-
-    t_values = [0, 0.25, 0.5, 0.75, 1.0]
-    colors = ['#2C3E50', '#34495E', '#E74C3C', '#C0392B', '#7F8C8D']
-    fig_kernel_sections = go.Figure()
-    for t_val, color in zip(t_values, colors):
-        K_section = [K_current(xi, t_val) for xi in x] # Используем оптимизированную K_current
-        fig_kernel_sections.add_trace(go.Scatter(
-            x=x, y=K_section, mode='lines', name=f't = {t_val}', line=dict(color=color, width=2)))
-    fig_kernel_sections.update_layout(
-        title='', xaxis_title='x', yaxis_title='K(x,t)', hovermode='x unified',
-        template='plotly_white', height=400,
-        plot_bgcolor='white', paper_bgcolor='white',
-        font=dict(family="Roboto, sans-serif", size=12, color="#2C3E50")
-    )
-
-    n_points_3d = min(50, len(x))
-    X, T = np.meshgrid(x[:n_points_3d], x[:n_points_3d])
-    K_3d = np.zeros_like(X)
-    for i in range(len(X)):
-        for j in range(len(T)):
-            K_3d[i, j] = K_current(X[i, j], T[i, j]) # Используем оптимизированную K_current
-    fig_kernel_3d = go.Figure(data=[go.Surface(z=K_3d, x=X, y=T, colorscale='Blues')])
-    fig_kernel_3d.update_layout(
-        title='', scene=dict(xaxis_title='x', yaxis_title='t', zaxis_title='K(x,t)'),
-        height=400, plot_bgcolor='white', paper_bgcolor='white',
-        font=dict(family="Roboto, sans-serif", size=12, color="#2C3E50")
-    )
-
-    computation_time = time.time() - start_time
-    return (
-        fig_solution,
-        fig_derivative,
-        error_text,
-        fig_kernel_sections,
-        fig_kernel_3d,
-        computation_time,
-    )
-
-def create_empty_figure(title="Ожидание ввода"):
+def create_empty_figure(title=""):
     """Создает пустой график без ошибок"""
     fig = go.Figure()
     fig.update_layout(
@@ -142,6 +46,124 @@ def create_empty_figure(title="Ожидание ввода"):
     )
     return fig
 
+def build_sections_plot(kernel_expr, x_min, x_max):
+    """Строит график сечений ядра (автоматические t от min до max)"""
+    if not kernel_expr or not kernel_expr.strip():
+        return create_empty_figure("")
+    
+    kernel_valid, _ = validate_expression_detailed(kernel_expr, ['x', 't'])
+    if not kernel_valid:
+        return create_empty_figure("")
+    
+    if x_min is None:
+        x_min = 0
+    if x_max is None or x_max <= x_min:
+        x_max = x_min + 1
+    
+    # Автоматически генерируем 5 значений t от x_min до x_max
+    t_values = np.linspace(x_min, x_max, 5)
+    
+    try:
+        K_func = create_function_from_string(kernel_expr, ['x', 't'])
+    except Exception as e:
+        return create_empty_figure("")
+    
+    n_points = 500
+    x_vals = np.linspace(x_min, x_max, n_points)
+    
+    colors = ['#2C3E50', '#34495E', '#E74C3C', '#C0392B', '#7F8C8D']
+    fig = go.Figure()
+    
+    for i, t_val in enumerate(t_values):
+        color = colors[i % len(colors)]
+        try:
+            K_vals = [K_func(xi, t_val) for xi in x_vals]
+            fig.add_trace(go.Scatter(
+                x=x_vals, y=K_vals, 
+                mode='lines', 
+                name=f't = {t_val:.3f}', 
+                line=dict(color=color, width=2)
+            ))
+        except Exception:
+            pass
+    
+    fig.update_layout(
+        title=f'x ∈ [{x_min:.2f}, {x_max:.2f}]',
+        xaxis_title='x',
+        yaxis_title='K(x,t)',
+        hovermode='x unified',
+        template='plotly_white',
+        height=400,
+        plot_bgcolor='white',
+        paper_bgcolor='white',
+        font=dict(family="Roboto, sans-serif", size=12, color="#2C3E50"),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+    )
+    
+    return fig
+
+def build_surface_plot(kernel_expr, x_min, x_max, t_min, t_max):
+    """Строит 3D поверхность ядра"""
+    if not kernel_expr or not kernel_expr.strip():
+        return create_empty_figure("")
+    
+    kernel_valid, _ = validate_expression_detailed(kernel_expr, ['x', 't'])
+    if not kernel_valid:
+        return create_empty_figure("")
+    
+    if x_min is None:
+        x_min = 0
+    if x_max is None or x_max <= x_min:
+        x_max = x_min + 1
+    if t_min is None:
+        t_min = 0
+    if t_max is None or t_max <= t_min:
+        t_max = t_min + 1
+    
+    try:
+        K_func = create_function_from_string(kernel_expr, ['x', 't'])
+    except Exception as e:
+        return create_empty_figure("")
+    
+    n_points = 50
+    x_vals = np.linspace(x_min, x_max, n_points)
+    t_vals = np.linspace(t_min, t_max, n_points)
+    
+    X, T = np.meshgrid(x_vals, t_vals)
+    K_vals = np.zeros_like(X)
+    
+    for i in range(len(X)):
+        for j in range(len(T)):
+            try:
+                K_vals[i, j] = K_func(X[i, j], T[i, j])
+            except Exception:
+                K_vals[i, j] = np.nan
+    
+    fig = go.Figure(data=[go.Surface(
+        z=K_vals, 
+        x=X, 
+        y=T, 
+        colorscale='Blues',
+        contours={
+            "z": {"show": True, "usecolormap": True, "highlightcolor": "limegreen", "project": {"z": True}}
+        }
+    )])
+    
+    fig.update_layout(
+        title=f'x ∈ [{x_min:.2f}, {x_max:.2f}], t ∈ [{t_min:.2f}, {t_max:.2f}]',
+        scene=dict(
+            xaxis_title='x',
+            yaxis_title='t',
+            zaxis_title='K(x,t)',
+            camera=dict(eye=dict(x=1.5, y=1.5, z=1.2))
+        ),
+        height=450,
+        plot_bgcolor='white',
+        paper_bgcolor='white',
+        font=dict(family="Roboto, sans-serif", size=12, color="#2C3E50")
+    )
+    
+    return fig
 
 @lru_cache(maxsize=128) 
 def get_cached_functions(kernel_expr, rhs_expr):
@@ -193,7 +215,65 @@ def format_equation_beautifully(kernel_expr, rhs_expr):
                 html.Span(" · φ(t) dt", style={'fontSize': '1.1em', 'color': '#2C3E50'}),
             ], style={'marginBottom': '10px', 'textAlign': 'center'}),
         ])
+
+def run_volterra_solution(kernel_expr, rhs_expr, initial_condition, N_points=1000, N_ref=200):
+    start_time = time.time()
     
+    if not kernel_expr or not kernel_expr.strip():
+        raise ValueError("Выражение для ядра K(x,t) не может быть пустым")
+    if not rhs_expr or not rhs_expr.strip():
+        raise ValueError("Выражение для правой части f(x) не может быть пустым")
+    
+    K_current, f_current = get_cached_functions(kernel_expr, rhs_expr) 
+    
+    try:
+        test_K = K_current(0.5, 0.5)
+        test_f = f_current(0.5)
+    except Exception as e:
+        raise ValueError(f"Ошибка при проверке функций: {str(e)}")
+
+    a, b = 0, 1
+    h = (b - a) / N_points
+    x = np.linspace(a, b, N_points + 1)
+
+    phi_numerical, integral_values = solve_volterra_RK4(x, h, K_current, f_current, initial_condition)
+    phi_reference = get_reference_solution(x, K_current, f_current, initial_condition, N_ref)
+    f_values = np.array([f_current(xi) for xi in x])
+    
+    derivative_numerical = np.gradient(phi_numerical, h)
+    derivative_exact = f_values + integral_values 
+
+    fig_solution = go.Figure()
+    fig_solution.add_trace(go.Scatter(x=x, y=phi_reference, mode='lines', name='Эталон',
+                                      line=dict(color='#E74C3C', width=2)))
+    fig_solution.add_trace(go.Scatter(x=x, y=phi_numerical, mode='lines', name='Численное',
+                                      line=dict(color='#2C3E50', dash='dash', width=1.5)))
+    fig_solution.update_layout(
+        title='', xaxis_title='x', yaxis_title='φ(x)', hovermode='x unified',
+        template='plotly_white', height=400, showlegend=True,
+        plot_bgcolor='white', paper_bgcolor='white',
+        font=dict(family="Roboto, sans-serif", size=12, color="#2C3E50")
+    )
+    
+    fig_derivative = go.Figure()
+    fig_derivative.add_trace(go.Scatter(x=x, y=derivative_numerical, mode='lines', name="φ'(x) (численная)",
+                                        line=dict(color='#34495E', width=2)))
+    fig_derivative.add_trace(go.Scatter(x=x, y=derivative_exact, mode='lines', 
+                                        name='f(x) + I(x) (точная)', line=dict(color='#E74C3C', dash='dash', width=1.5)))
+    fig_derivative.update_layout(
+        title='', xaxis_title='x', yaxis_title="φ'(x)", hovermode='x unified',
+        template='plotly_white', height=400, showlegend=True,
+        plot_bgcolor='white', paper_bgcolor='white',
+        font=dict(family="Roboto, sans-serif", size=12, color="#2C3E50")
+    )
+
+    error = np.abs(phi_numerical - phi_reference)
+    max_error = np.max(error)
+    error_text = f'Максимальная ошибка: {max_error:.2e}'
+
+    computation_time = time.time() - start_time
+    return (fig_solution, fig_derivative, error_text, computation_time)
+
 def register_callbacks(app):
     
     @app.callback(
@@ -277,21 +357,18 @@ def register_callbacks(app):
             return no_update, RHS_EXAMPLES[example_name]
     
     @app.callback(
-    [Output('legend-content', 'style'),
-     Output('legend-state', 'data')],
-    Input('legend-toggle', 'n_clicks'),
-    State('legend-state', 'data'),
-    prevent_initial_call=True
-)
+        [Output('legend-content', 'style'),
+         Output('legend-state', 'data')],
+        Input('legend-toggle', 'n_clicks'),
+        State('legend-state', 'data'),
+        prevent_initial_call=True
+    )
     def toggle_legend(n_clicks, state):
         if n_clicks is None:
             return {'display': 'none', 'marginTop': '10px'}, state
-    
         if state.get('expanded', False):
-        # Скрываем
             return {'display': 'none', 'marginTop': '10px'}, {'expanded': False}
         else:
-        # Показываем
             return {'display': 'block', 'marginTop': '10px', 'animation': 'fadeIn 0.3s ease-in'}, {'expanded': True}
     
     @app.callback(
@@ -314,8 +391,6 @@ def register_callbacks(app):
          Output('error-message', 'style'),
          Output('volterra-graph', 'figure'),
          Output('derivative-plot', 'figure'),
-         Output('kernel-sections-plot', 'figure'),
-         Output('kernel-3d-plot', 'figure'),
          Output('error-output', 'children')],
         [Input('kernel-input', 'value'),
          Input('rhs-input', 'value')],
@@ -362,48 +437,80 @@ def register_callbacks(app):
         
         if error_text:
             error_style = {'display': 'block', 'className': 'error-message'}
-            empty_fig = create_empty_figure("Некорректное выражение")
+            empty_fig = create_empty_figure()
             return (button_disabled, button_title, error_text, error_style,
-                    empty_fig, empty_fig, empty_fig, empty_fig, "")
+                    empty_fig, empty_fig, "")
         else:
-            waiting_fig = create_empty_figure("Введите выражения и нажмите 'Решить'")
+            waiting_fig = create_empty_figure()
             return (button_disabled, button_title, "", {"display": "none"},
-                    waiting_fig, waiting_fig, waiting_fig, waiting_fig, "")
+                    waiting_fig, waiting_fig, "")
     
+    # Callback для обновления графика сечений
+    @app.callback(
+        Output('kernel-sections-plot', 'figure'),
+        [Input('update-sections-btn', 'n_clicks'),
+         Input('kernel-input', 'value')],
+        [State('sections-x-min', 'value'),
+         State('sections-x-max', 'value')],
+        prevent_initial_call=True
+    )
+    def update_sections_plot(n_clicks, kernel_expr, x_min, x_max):
+        return build_sections_plot(kernel_expr, x_min, x_max)
+    
+    # Callback для обновления 3D графика
+    @app.callback(
+        Output('kernel-3d-plot', 'figure'),
+        [Input('update-surf-btn', 'n_clicks'),
+         Input('kernel-input', 'value')],
+        [State('surf-x-min', 'value'),
+         State('surf-x-max', 'value'),
+         State('surf-t-min', 'value'),
+         State('surf-t-max', 'value')],
+        prevent_initial_call=True
+    )
+    def update_surface_plot(n_clicks, kernel_expr, x_min, x_max, t_min, t_max):
+        return build_surface_plot(kernel_expr, x_min, x_max, t_min, t_max)
+    
+    # Callback для решения уравнения
     @app.callback(
         [Output('volterra-graph', 'figure', allow_duplicate=True),
          Output('derivative-plot', 'figure', allow_duplicate=True),
          Output('error-output', 'children', allow_duplicate=True),
-         Output('kernel-sections-plot', 'figure', allow_duplicate=True),
-         Output('kernel-3d-plot', 'figure', allow_duplicate=True),
          Output('loading-indicator', 'style'),
          Output('status-message', 'children'),
          Output('status-message', 'style'),
          Output('computation-time', 'data'),
          Output('solutions-history', 'data'),
          Output('max-error-display', 'children'),
-         Output('max-error-display', 'style')],
+         Output('max-error-display', 'style'),
+         Output('kernel-sections-plot', 'figure', allow_duplicate=True),
+         Output('kernel-3d-plot', 'figure', allow_duplicate=True)],
         [Input('solve-button', 'n_clicks')],
         [State('kernel-input', 'value'),
          State('rhs-input', 'value'),
          State('initial-condition', 'value'),
-         State('solutions-history', 'data')],
+         State('solutions-history', 'data'),
+         State('sections-x-min', 'value'),
+         State('sections-x-max', 'value'),
+         State('surf-x-min', 'value'),
+         State('surf-x-max', 'value'),
+         State('surf-t-min', 'value'),
+         State('surf-t-max', 'value')],
         prevent_initial_call=True
     )
-    def update_graph(n_clicks, kernel_expr, rhs_expr, initial_condition, history_data):
+    def update_graph(n_clicks, kernel_expr, rhs_expr, initial_condition, history_data,
+                     sec_x_min, sec_x_max, surf_x_min, surf_x_max, surf_t_min, surf_t_max):
         if n_clicks is None:
             raise PreventUpdate
         
         if not kernel_expr or not kernel_expr.strip():
             raise PreventUpdate
-        
         if not rhs_expr or not rhs_expr.strip():
             raise PreventUpdate
         
         kernel_valid, _ = validate_expression_detailed(kernel_expr, ['x', 't'])
         if not kernel_valid:
             raise PreventUpdate
-        
         rhs_valid, _ = validate_expression_detailed(rhs_expr, ['x'])
         if not rhs_valid:
             raise PreventUpdate
@@ -416,39 +523,32 @@ def register_callbacks(app):
         
         try:
             (fig_solution, fig_derivative, error_text, 
-             fig_kernel_sections, fig_kernel_3d,
              computation_time) = run_volterra_solution(kernel_expr, rhs_expr, initial_condition, N_points, N_ref)
             
+            # Строим графики ядра с текущими настройками
+            fig_sections = build_sections_plot(kernel_expr, sec_x_min, sec_x_max)
+            fig_surface = build_surface_plot(kernel_expr, surf_x_min, surf_x_max, surf_t_min, surf_t_max)
+            
             max_error_display = html.Div([
-                                html.Div(
-                                    error_text,
-                                    style={
-                                        'fontWeight': 'bold',
-                                        'color': '#C0392B',
-                                        'fontSize': '1.1em',
-                                        'textAlign': 'center',
-                                        'padding': '12px 24px',
-                                        'background': "#E9F1F5",
-                                        'borderRadius': '12px',
-                                        'border': '1px solid #E8DCD0',
-                                        'boxShadow': '0 2px 8px rgba(0, 0, 0, 0.05)',
-                                        'display': 'inline-block',
-                                        'width': 'auto',
-                                        'fontFamily': "'Roboto', monospace"
-                                    }
-                                )
-                            ], style={
-                                'display': 'flex',
-                                'justifyContent': 'center',
-                                'alignItems': 'center',
-                                'margin': '30px 0 20px 0',
-                                'padding': '0 20px',
-                                'width': '100%'
-                            })
+                html.Div(
+                    error_text,
+                    style={
+                        'fontWeight': 'bold',
+                        'color': '#C0392B',
+                        'fontSize': '1.1em',
+                        'textAlign': 'center',
+                        'padding': '12px 24px',
+                        'background': "#E9F1F5",
+                        'borderRadius': '12px',
+                        'border': '1px solid #E8DCD0',
+                        'display': 'inline-block'
+                    }
+                )
+            ], style={'display': 'flex', 'justifyContent': 'center', 'margin': '30px 0 20px 0'})
             
             success_status = html.Div([
                 html.Span("Вычисление успешно завершено! ", style={'fontWeight': 'bold', 'color': '#2C3E50'}),
-                html.Span(f"Время выполнения: {computation_time:.2f} секунд", style={'color': '#7F8C8D'})
+                html.Span(f"Время: {computation_time:.2f} с", style={'color': '#7F8C8D'})
             ], style={'color': '#27ae60'})
             
             hist = []
@@ -481,9 +581,9 @@ def register_callbacks(app):
             new_history = new_history[:20]
             
             return (fig_solution, fig_derivative, error_text, 
-                    fig_kernel_sections, fig_kernel_3d,
                     {'display': 'none'}, success_status, {'textAlign': 'center', 'margin': '10px'}, 
-                    computation_time, new_history, max_error_display, {'display': 'block'})
+                    computation_time, new_history, max_error_display, {'display': 'block'},
+                    fig_sections, fig_surface)
             
         except Exception as e:
             error_msg = str(e)
@@ -495,12 +595,14 @@ def register_callbacks(app):
                 html.Div(error_msg, style={'fontSize': '0.9em', 'marginTop': '10px', 'color': '#C0392B'})
             ], style={'color': '#E74C3C'})
             
-            empty_fig = create_empty_figure("Ошибка вычислений")
+            empty_fig = create_empty_figure()
             empty_error_display = html.Div("")
+            empty_kernel_fig = create_empty_figure()
             
-            return (empty_fig, empty_fig, "Ошибка вычислений", empty_fig, empty_fig,
-                    {'display': 'none'}, error_status, {'textAlign': 'center', 'margin': '10px'}, 
-                    0, no_update, empty_error_display, {'display': 'none'})
+            return (empty_fig, empty_fig, "Ошибка вычислений", {'display': 'none'}, 
+                    error_status, {'textAlign': 'center', 'margin': '10px'}, 
+                    0, no_update, empty_error_display, {'display': 'none'},
+                    empty_kernel_fig, empty_kernel_fig)
 
     @app.callback(
         Output('history-list', 'children'),
@@ -512,11 +614,11 @@ def register_callbacks(app):
         ctx = callback_context
         
         if clear_clicks and ctx.triggered and 'clear-history-btn' in ctx.triggered[0]['prop_id']:
-            return html.Div("История пуста. Решите уравнение, чтобы оно появилось здесь.", 
+            return html.Div("История пуста", 
                           style={'color': '#95A5A6', 'fontStyle': 'italic', 'textAlign': 'center', 'padding': '20px'})
         
         if not history_data or len(history_data) == 0:
-            return html.Div("История пуста. Решите уравнение, чтобы оно появилось здесь.", 
+            return html.Div("История пуста", 
                           style={'color': '#95A5A6', 'fontStyle': 'italic', 'textAlign': 'center', 'padding': '20px'})
         
         history_items = []
@@ -554,11 +656,7 @@ def register_callbacks(app):
                                     html.Button(
                                         html.Img(
                                             src='/assets/load-icon.png',
-                                            style={
-                                                'width': '20px',
-                                                'height': '20px',
-                                                'display': 'block'
-                                            }
+                                            style={'width': '20px', 'height': '20px', 'display': 'block'}
                                         ),
                                         id={'type': 'load-solution', 'index': record['id']},
                                         style={
@@ -568,7 +666,6 @@ def register_callbacks(app):
                                             'border': '1px solid #D1D9E6',
                                             'borderRadius': '5px',
                                             'cursor': 'pointer',
-                                            'transition': 'transform 0.2s ease',
                                             'display': 'inline-flex',
                                             'alignItems': 'center',
                                             'justifyContent': 'center'
@@ -578,11 +675,7 @@ def register_callbacks(app):
                                     html.Button(
                                         html.Img(
                                             src='/assets/delete-icon.png',
-                                            style={
-                                                'width': '20px',
-                                                'height': '20px',
-                                                'display': 'block'
-                                            }
+                                            style={'width': '20px', 'height': '20px', 'display': 'block'}
                                         ),
                                         id={'type': 'delete-solution', 'index': record['id']},
                                         style={
@@ -591,7 +684,6 @@ def register_callbacks(app):
                                             'border': '1px solid #D1D9E6',
                                             'borderRadius': '5px',
                                             'cursor': 'pointer',
-                                            'transition': 'transform 0.2s ease',
                                             'display': 'inline-flex',
                                             'alignItems': 'center',
                                             'justifyContent': 'center'
@@ -604,8 +696,7 @@ def register_callbacks(app):
                         ], 
                         style={'padding': '12px', 'borderBottom': '1px solid #D1D9E6',
                                'marginBottom': '8px', 'borderRadius': '8px',
-                               'backgroundColor': 'white', 'border': '1px solid #D1D9E6',
-                               'transition': 'transform 0.2s ease, box-shadow 0.2s ease'}
+                               'backgroundColor': 'white', 'border': '1px solid #D1D9E6'}
                     )
                 ],
                 id=f'history-item-{record["id"]}'
@@ -620,20 +711,27 @@ def register_callbacks(app):
          Output('initial-condition', 'value', allow_duplicate=True),
          Output('volterra-graph', 'figure', allow_duplicate=True),
          Output('derivative-plot', 'figure', allow_duplicate=True),
-         Output('kernel-sections-plot', 'figure', allow_duplicate=True),
-         Output('kernel-3d-plot', 'figure', allow_duplicate=True),
          Output('error-output', 'children', allow_duplicate=True),
          Output('status-message', 'children', allow_duplicate=True),
          Output('status-message', 'style', allow_duplicate=True),
          Output('history-modal', 'style', allow_duplicate=True),
          Output('solve-button', 'n_clicks', allow_duplicate=True),
          Output('max-error-display', 'children', allow_duplicate=True),
-         Output('max-error-display', 'style', allow_duplicate=True)],
+         Output('max-error-display', 'style', allow_duplicate=True),
+         Output('kernel-sections-plot', 'figure', allow_duplicate=True),
+         Output('kernel-3d-plot', 'figure', allow_duplicate=True)],
         [Input({'type': 'load-solution', 'index': ALL}, 'n_clicks')],
-        [State('solutions-history', 'data')],
+        [State('solutions-history', 'data'),
+         State('sections-x-min', 'value'),
+         State('sections-x-max', 'value'),
+         State('surf-x-min', 'value'),
+         State('surf-x-max', 'value'),
+         State('surf-t-min', 'value'),
+         State('surf-t-max', 'value')],
         prevent_initial_call='initial_duplicate'
     )
-    def load_solution(load_clicks, history_data):
+    def load_solution(load_clicks, history_data, sec_x_min, sec_x_max,
+                       surf_x_min, surf_x_max, surf_t_min, surf_t_max):
         ctx = callback_context
         if not ctx.triggered:
             raise PreventUpdate
@@ -656,12 +754,14 @@ def register_callbacks(app):
             try:
                 initial_cond = record.get('initial_condition', 0.0)
                 (fig_solution, fig_derivative, err_text, 
-                 fig_sec, fig_3d, _t) = run_volterra_solution(
+                 _t) = run_volterra_solution(
                     record['kernel'], record['rhs'], initial_cond, N_points, N_ref
                 )
                 
+                fig_sections = build_sections_plot(record['kernel'], sec_x_min, sec_x_max)
+                fig_surface = build_surface_plot(record['kernel'], surf_x_min, surf_x_max, surf_t_min, surf_t_max)
+                
                 max_error_display = html.Div([
-                    html.Span("📊 ", style={'fontSize': '1.2em'}),
                     html.Span(err_text, style={'fontWeight': 'bold', 'color': '#E74C3C', 'fontSize': '1.1em'})
                 ])
                 
@@ -671,11 +771,12 @@ def register_callbacks(app):
                     html.Span("Ошибка! ", style={'fontWeight': 'bold', 'color': '#E74C3C'}),
                     html.Div(error_msg, style={'fontSize': '0.9em', 'marginTop': '10px', 'color': '#C0392B'})
                 ], style={'color': '#E74C3C', 'textAlign': 'center', 'padding': '10px'})
-                empty_fig = create_empty_figure("Ошибка вычислений")
+                empty_fig = create_empty_figure()
                 empty_error_display = html.Div("")
+                empty_kernel_fig = create_empty_figure()
                 return (
                     no_update, no_update, no_update,
-                    empty_fig, empty_fig, empty_fig, empty_fig,
+                    empty_fig, empty_fig,
                     no_update,
                     status_msg,
                     {'textAlign': 'center', 'margin': '10px'},
@@ -684,12 +785,14 @@ def register_callbacks(app):
                      'backdropFilter': 'blur(5px)'},
                     None,
                     empty_error_display,
-                    {'display': 'none'}
+                    {'display': 'none'},
+                    empty_kernel_fig,
+                    empty_kernel_fig
                 )
             
             status_msg = html.Div([
                 html.Span("Загружено из истории! ", style={'fontWeight': 'bold', 'color': '#2C3E50'}),
-                html.Span(f"Решение от {record.get('timestamp', '')} {record.get('date', '')}", style={'color': '#7F8C8D'})
+                html.Span(f"{record.get('timestamp', '')} {record.get('date', '')}", style={'color': '#7F8C8D'})
             ], style={'color': '#27ae60', 'textAlign': 'center', 'padding': '10px'})
             
             modal_closed_style = {'position': 'fixed', 'top': '0', 'left': '0', 'width': '100%', 'height': '100%',
@@ -697,12 +800,14 @@ def register_callbacks(app):
                                   'backdropFilter': 'blur(5px)'}
             
             return (record['kernel'], record['rhs'], initial_cond,
-                    fig_solution, fig_derivative, fig_sec, fig_3d, err_text,
+                    fig_solution, fig_derivative, err_text,
                     status_msg, {'textAlign': 'center', 'margin': '10px'},
                     modal_closed_style,
                     1,
                     max_error_display,
-                    {'display': 'block'})
+                    {'display': 'block'},
+                    fig_sections,
+                    fig_surface)
         
         raise PreventUpdate
     
