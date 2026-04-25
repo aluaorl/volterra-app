@@ -6,6 +6,7 @@ from components.history_panel import create_history_panel
 from components.callbacks import register_callbacks
 
 app = dash.Dash(__name__, suppress_callback_exceptions=True)
+server = app.server
 
 app.layout = html.Div(children=[
     html.H1(children='Решатель ИДУ Вольтерра'),
